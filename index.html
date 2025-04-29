@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Inventory Checker AI</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="manifest.json">
+  <style>
+    /* Mobile App Style */
+    body {
+      font-family: 'Poppins', sans-serif;  
+      margin: 0;
+      padding: 0;
+      background: #f9f9f9;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #4CAF50;
+      color: white;
+      padding: 15px 20px;
+      font-size: 20px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .hamburger {
+      font-size: 26px;
+      background: none;
+      border: none;
+      color: white;
+      cursor: pointer;
+    }
+    .side-menu {
+      position: fixed;
+      top: 0;
+      right: -260px;
+      width: 250px;
+      height: 100%;
+      background: #333;
+      color: white;
+      padding: 20px;
+      transition: right 0.3s ease;
+      z-index: 15;
+      display: flex;
+      flex-direction: column;
+    }
+    .side-menu.active {
+      right: 0;
+    }
+    .side-menu button {
+      background: #4CAF50;
+      color: white;
+      border: none;
+      margin: 8px 0;
+      padding: 12px;
+      font-size: 16px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    #overlay {
+      display: none;
+      position: fixed;
+      width: 100%;
+      height: 100%;
+      top: 0; left: 0;
+      background: rgba(0,0,0,0.4);
+      z-index: 5;
+    }
+    .section {
+      padding: 20px;
+    }
+    input, button {
+      width: 100%;
+      padding: 12px;
+      margin-top: 10px;
+      font-size: 16px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      box-sizing: border-box;
+    }
+    button {
+      background: #4CAF50;
+      color: white;
+      border: none;
+      font-weight: bold;
+      cursor: pointer;
+    }  
+    .suggestions {
+      background: white;
+      border: 1px solid #ccc;
+      margin-top: 2px;
+      border-radius: 8px;
+      overflow-y: auto;
+      max-height: 150px;
+    }
+    .suggestions div {
+      padding: 10px;
+      cursor: pointer;
+    }
+    .suggestions div:hover {
+      background: #f0f0f0;
+    }
+    .result, .message {
+      margin-top: 15px;
+      padding: 10px;
+      background: #e0e0e0;
+      border-radius: 8px;
+    }
+    .back-button {
+      background: #f44336;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  Inventory Checker
+  <button class="hamburger" onclick="toggleMenu()">☰</button>
+</header>
+
+<div id="overlay" onclick="toggleMenu()"></div>
+
+<div id="sideMenu" class="side-menu">
+  <button onclick="openAdd()">➕ Add Item</button>
+  <button onclick="openUpdate()">✏️ Update Item</button>
+  <button onclick="openDelete()">🗑️ Delete Item</button>
+  <button onclick="downloadCSV()">⬇️ Download CSV</button>
+  <button onclick="toggleMenu()">❌ Close</button>
+</div>
+
+<div id="main" class="section">
+  <input id="searchInput" placeholder="Search item..." oninput="showSuggestions('searchInput', 'suggestBox')" onkeydown="handleSearch(event)">
+  <div class="suggestions" id="suggestBox"></div>
+  <button onclick="startListening()">🎤 Speak</button>
+  <div id="searchResult" class="result"></div>
+  <div id="resultMessage" class="result"></div> <!-- Result message here -->
+</div>
+
+<div id="addSection" class="section" style="display:none;">
+  <button class="back-button" onclick="goBack()">🔙 Back</button>
+  <h3>Add Item</h3>
+  <input id="newItem" placeholder="Item Name" oninput="showSuggestions('newItem', 'addSuggestBox')">
+  <div class="suggestions" id="addSuggestBox"></div>
+  <input id="newRack" placeholder="Rack Name">
+  <input id="newBin" placeholder="Bin Name">
+  <input id="newQty" placeholder="Quantity" type="number">
+  <button onclick="addItem()">Add</button>
+</div>
+
+<div id="updateSection" class="section" style="display:none;">
+  <button class="back-button" onclick="goBack()">🔙 Back</button>
+  <h3>Update Item Quantity</h3>
+  <input id="updateItem" placeholder="Item to Update" oninput="showSuggestions('updateItem', 'updateSuggestBox')">
+  <div class="suggestions" id="updateSuggestBox"></div>
+  <input id="updateQty" placeholder="New Quantity" type="number">
+  <button onclick="updateItem()">Update</button>
+</div>
+
+<div id="deleteSection" class="section" style="display:none;">
+  <button class="back-button" onclick="goBack()">🔙 Back</button>
+  <h3>Delete Item</h3>
+  <input id="deleteItem" placeholder="Item to Delete" oninput="showSuggestions('deleteItem', 'deleteSuggestBox')">
+  <div class="suggestions" id="deleteSuggestBox"></div>
+  <button onclick="deleteItem()">Delete</button>
+</div>
+
+<script>
+const inventory = {
+  "screwdriver": { rack: "A1", bin: "B3", quantity: 25 },
+  "hammer": { rack: "A2", bin: "B1", quantity: 10 },
+  "wrench": { rack: "A3", bin: "B4", quantity: 15 },
+  "pliers": { rack: "A4", bin: "B2", quantity: 8 }
+};
+
+function toggleMenu() {
+  document.getElementById('sideMenu').classList.toggle('active');
+  document.getElementById('overlay').style.display = document.getElementById('sideMenu').classList.contains('active') ? 'block' : 'none';
+}
+
+function goBack() {
+  hideAll();
+  document.getElementById('main').style.display = 'block';
+  clearInputs();
+}
+
+function hideAll() {
+  document.getElementById('main').style.display = 'none';
+  document.getElementById('addSection').style.display = 'none';
+  document.getElementById('updateSection').style.display = 'none';
+  document.getElementById('deleteSection').style.display = 'none';
+}
+
+function openAdd() {
+  toggleMenu();
+  hideAll();
+  document.getElementById('addSection').style.display = 'block';
+}
+
+function openUpdate() {
+  toggleMenu();
+  hideAll();
+  document.getElementById('updateSection').style.display = 'block';
+}
+
+function openDelete() {
+  toggleMenu();
+  hideAll();
+  document.getElementById('deleteSection').style.display = 'block';
+}
+
+function clearInputs() {
+  document.getElementById('searchInput').value = '';
+  document.getElementById('searchResult').innerHTML = '';
+  document.getElementById('resultMessage').innerHTML = '';
+}
+
+function showSuggestions(inputId, suggestBoxId) {
+  const input = document.getElementById(inputId).value.toLowerCase();
+  const suggestBox = document.getElementById(suggestBoxId);
+  suggestBox.innerHTML = "";
+  if (!input) return;
+  Object.keys(inventory).forEach(item => {
+    if (item.includes(input)) {
+      const div = document.createElement('div');
+      div.textContent = item;
+      div.onclick = () => {
+        document.getElementById(inputId).value = item;
+        suggestBox.innerHTML = "";
+      };
+      suggestBox.appendChild(div);
+    }
+  });
+}
+
+function handleSearch(event) {
+  if (event.key === 'Enter') searchItem();
+}
+
+function searchItem() {
+  const input = document.getElementById('searchInput').value.toLowerCase();
+  const resultBox = document.getElementById('searchResult');
+  const found = inventory[input];
+  if (found) {
+    resultBox.innerHTML = `
+      <p><strong>Item:</strong> ${input}</p>
+      <p><strong>Rack:</strong> ${found.rack}</p>
+      <p><strong>Bin:</strong> ${found.bin}</p>
+      <p><strong>Quantity:</strong> ${found.quantity}</p>
+    `;
+  } else {
+    resultBox.innerHTML = `<p style="color:red;">❌ Item not found!</p>`;
+    showResultMessage('❌ Item not found!');
+  }
+}
+
+function addItem() {
+  const name = document.getElementById('newItem').value.toLowerCase();
+  const rack = document.getElementById('newRack').value;
+  const bin = document.getElementById('newBin').value;
+  const qty = document.getElementById('newQty').value;
+  if (name && rack && bin && qty) {
+    inventory[name] = { rack, bin, quantity: parseInt(qty) };
+    showResultMessage('✅ Item added successfully!');
+    goBack();
+  } else {
+    showResultMessage('❌ Fill all fields to add an item!');
+  }
+}
+
+function updateItem() {
+  const name = document.getElementById('updateItem').value.toLowerCase();
+  const qty = document.getElementById('updateQty').value;
+  if (inventory[name]) {
+    inventory[name].quantity = qty ? parseInt(qty) : inventory[name].quantity;
+    showResultMessage('✅ Item quantity updated!');
+    goBack();
+  } else {
+    showResultMessage('❌ Item not found for update!');
+  }
+}
+
+function deleteItem() {
+  const name = document.getElementById('deleteItem').value.toLowerCase();
+  if (inventory[name]) {
+    delete inventory[name];
+    showResultMessage('✅ Item deleted successfully!');
+    goBack();
+  } else {
+    showResultMessage('❌ Item not found for deletion!');
+  }
+}
+
+function showResultMessage(message) {
+  document.getElementById('resultMessage').innerHTML = message;
+  setTimeout(() => {
+    document.getElementById('resultMessage').innerHTML = '';
+  }, 3000);
+}
+
+function downloadCSV() {
+  let csv = "Item,Rack,Bin,Quantity\n";
+  Object.keys(inventory).forEach(item => {
+    csv += `${item},${inventory[item].rack},${inventory[item].bin},${inventory[item].quantity}\n`;
+  });
+  const blob = new Blob([csv], { type: "text/csv" });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = "inventory.csv";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+function startListening() {
+  if (!('webkitSpeechRecognition' in window)) {
+    alert('Speech Recognition not supported!');
+    return;
+  }
+  const recognition = new webkitSpeechRecognition();
+  recognition.lang = 'en-US';
+  recognition.start();
+  recognition.onresult = (event) => {
+    document.getElementById('searchInput').value = event.results[0][0].transcript.toLowerCase();
+    searchItem();
+  };
+  if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js')
+    .then(reg => console.log('Service Worker registered!', reg))
+    .catch(err => console.log('Service Worker registration failed:', err));
+}
+
+}
+</script>
+
+</body>
+</html>
